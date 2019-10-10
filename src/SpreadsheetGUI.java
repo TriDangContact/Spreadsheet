@@ -10,6 +10,7 @@ import State.ResultState;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.EmptyStackException;
 
 public class SpreadsheetGUI {
     private static final String RESULT_STATE_TITLE = "Switch to Equation View";
@@ -52,7 +53,7 @@ public class SpreadsheetGUI {
         viewSwitchBtn = new JButton(RESULT_STATE_TITLE);
         viewSwitchBtn.addActionListener( event -> {
             switchState();
-            loadTableData();
+            refreshTable();
         });
 
         undoBtn = new JButton("Undo");
@@ -102,12 +103,17 @@ public class SpreadsheetGUI {
     }
 
     private void undo() {
-        CellData restored = (CellData) spreadsheet.popHistory();
-        int index = spreadsheet.indexOf(restored.getLabel());
-        spreadsheet.getArray()[index] = restored;
-        loadTableData();
+        try {
+            CellData restored = (CellData) spreadsheet.popHistory();
+            int index = spreadsheet.indexOf(restored.getLabel());
+            spreadsheet.getArray()[index] = restored;
+            refreshCell(index);
+        } catch (EmptyStackException exception) {
+            inputField1.setText("No more history to Undo");
+        }
     }
 
+    // we have to check for valid inputs, and then evaluate them and refresh the cells
     private void done() {
         String inputValue = inputField1.getText();
         String cellLocation = inputField2.getText();
@@ -128,13 +134,13 @@ public class SpreadsheetGUI {
                 }
                 inputField1.setText("");
                 inputField2.setText("");
+                refreshCell(index);
             } else {
                 inputField1.setText("Please enter valid value");
             }
         } else{
             inputField2.setText("Please enter valid cell");
         }
-        loadTableData();
     }
 
     private void switchState() {
@@ -147,7 +153,29 @@ public class SpreadsheetGUI {
         }
     }
 
-    public void loadTableData() {
+    // we need to get the list of observers for cell that was changed, and refresh the cell for those observers
+    private void refreshCell(int index) {
+        CellData cellData = spreadsheet.getArray()[index];
+        Object[] observers = cellData.getObserversList().toArray();
+
+        if (spreadsheet.getState() instanceof ResultState) {
+            table.setValueAt(spreadsheet.getResult(index), 0, index);
+            for (Object obj : observers) {
+                CellData cell = (CellData) obj;
+                int observerIndex = spreadsheet.indexOf(cell.getLabel());
+                table.setValueAt(spreadsheet.getResult(observerIndex), 0, observerIndex);
+            }
+        } else {
+            table.setValueAt(spreadsheet.getEquation(index), 0, index);
+            for (Object obj : observers) {
+                CellData cell = (CellData) obj;
+                int observerIndex = spreadsheet.indexOf(cell.getLabel());
+                table.setValueAt(spreadsheet.getEquation(observerIndex), 0, observerIndex);
+            }
+        }
+    }
+    
+    public void refreshTable() {
         if (spreadsheet.getState() instanceof ResultState) {
             for (int index = 0; index < spreadsheet.size(); index++) {
                 table.setValueAt(spreadsheet.getResult(index), 0, index);
